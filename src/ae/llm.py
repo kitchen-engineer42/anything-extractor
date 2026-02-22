@@ -1,4 +1,4 @@
-"""LLM client wrapper for SiliconFlow (OpenAI-compatible API)."""
+"""LLM client wrapper with multi-provider support via LiteLLM."""
 
 from __future__ import annotations
 
@@ -9,24 +9,108 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+import litellm
 
 from ae.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_client: OpenAI | None = None
+# Suppress litellm's verbose default logging
+litellm.suppress_debug_info = True
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+
+_initialized = False
+
+# Known provider prefixes that LiteLLM handles natively
+_KNOWN_PREFIXES = (
+    "openai/",
+    "anthropic/",
+    "openrouter/",
+    "gemini/",
+    "mistral/",
+    "groq/",
+    "deepseek/",
+    "together_ai/",
+    "bedrock/",
+    "vertex_ai/",
+    "azure/",
+    "cohere/",
+    "replicate/",
+    "huggingface/",
+    "ollama/",
+    "perplexity/",
+)
 
 
-def get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        settings = get_settings()
-        _client = OpenAI(
-            api_key=settings.siliconflow_api_key,
-            base_url=settings.siliconflow_base_url,
-        )
-    return _client
+def _ensure_initialized() -> None:
+    """Set up LiteLLM with provider API keys from settings (once)."""
+    global _initialized
+    if _initialized:
+        return
+    _initialized = True
+
+    settings = get_settings()
+
+    # Drop unsupported params (e.g. response_format) instead of erroring
+    litellm.drop_params = True
+
+    # Set provider API keys so LiteLLM can route to them
+    if settings.siliconflow_api_key:
+        # SiliconFlow is OpenAI-compatible; no special litellm env var needed.
+        # Handled in _resolve_model via api_base + api_key.
+        pass
+    if settings.openai_api_key:
+        litellm.openai_key = settings.openai_api_key
+    if settings.anthropic_api_key:
+        litellm.anthropic_key = settings.anthropic_api_key
+    if settings.openrouter_api_key:
+        litellm.openrouter_api_key = settings.openrouter_api_key
+
+
+def _resolve_model(model: str) -> tuple[str, dict[str, Any]]:
+    """Resolve a model name to (litellm_model, extra_kwargs).
+
+    - If model has a known provider prefix (e.g. "openai/gpt-4o") → pass through.
+    - If no prefix → route via ae_default_provider setting (default: siliconflow).
+
+    For SiliconFlow, we use the "openai/" prefix with a custom api_base + api_key
+    since SiliconFlow exposes an OpenAI-compatible endpoint.
+    """
+    settings = get_settings()
+    extra: dict[str, Any] = {}
+
+    # Check if model already has a known provider prefix
+    for prefix in _KNOWN_PREFIXES:
+        if model.startswith(prefix):
+            return model, extra
+
+    # No prefix — route through default provider
+    provider = settings.ae_default_provider.lower().strip()
+
+    if provider == "siliconflow":
+        # SiliconFlow is OpenAI-compatible: use openai/ prefix with custom base
+        extra["api_base"] = settings.siliconflow_base_url
+        extra["api_key"] = settings.siliconflow_api_key
+        return f"openai/{model}", extra
+    elif provider == "openai":
+        return f"openai/{model}", extra
+    elif provider == "anthropic":
+        return f"anthropic/{model}", extra
+    elif provider == "openrouter":
+        return f"openrouter/{model}", extra
+    elif provider == "gemini":
+        return f"gemini/{model}", extra
+    elif provider == "mistral":
+        return f"mistral/{model}", extra
+    elif provider == "groq":
+        return f"groq/{model}", extra
+    elif provider == "deepseek":
+        return f"deepseek/{model}", extra
+    else:
+        # Unknown provider — try as openai-compatible with base URL
+        extra["api_base"] = settings.siliconflow_base_url
+        extra["api_key"] = settings.siliconflow_api_key
+        return f"openai/{model}", extra
 
 
 def chat(
@@ -38,23 +122,26 @@ def chat(
     **kwargs,
 ) -> dict[str, Any]:
     """Send a chat completion request and return the response with usage info."""
+    _ensure_initialized()
     settings = get_settings()
-    client = get_client()
     model = model or settings.ae_worker_model
 
+    resolved_model, extra_kwargs = _resolve_model(model)
+
     request_kwargs: dict[str, Any] = {
-        "model": model,
+        "model": resolved_model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
     if response_format:
         request_kwargs["response_format"] = response_format
+    request_kwargs.update(extra_kwargs)
     request_kwargs.update(kwargs)
 
-    logger.debug("LLM call: model=%s, messages=%d", model, len(messages))
+    logger.debug("LLM call: model=%s (resolved=%s), messages=%d", model, resolved_model, len(messages))
 
-    response = client.chat.completions.create(**request_kwargs)
+    response = litellm.completion(**request_kwargs)
 
     choice = response.choices[0]
     usage = response.usage

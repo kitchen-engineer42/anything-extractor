@@ -11,24 +11,26 @@ Three LLM-powered roles collaborate in an evolution loop:
 ```
                     ┌─────────────────┐
                     │    BUILDER      │  Analyze docs, propose schema,
-                    │    (GLM-5)      │  generate Python extraction code
+                    │                 │  generate Python extraction code
                     └────────┬────────┘
                              │
                              ▼
                     ┌─────────────────┐
                     │     WORKER      │  Parse PDFs, run extraction,
-                    │  (Qwen3-235B)   │  score confidence per field
+                    │                 │  score confidence per field
                     └────────┬────────┘
                              │
                              ▼
                     ┌─────────────────┐
                     │    OBSERVER     │  Judge quality (LLM-as-Judge),
-                    │   (Kimi-K2.5)   │  trigger Builder if quality drops
+                    │                 │  trigger Builder if quality drops
                     └────────┬────────┘
                              │
                              ▼
                        Evolution loop
 ```
+
+Each role can use any LLM provider (OpenAI, Anthropic, SiliconFlow, OpenRouter, Gemini, etc.) — configured independently via `.env`.
 
 **Builder** generates actual Python workflow code (not just prompts), validates it via AST parsing, and git-commits each version. **Worker** dynamically loads and executes these workflows. **Observer** evaluates output quality and decides when to trigger re-evolution. The loop runs until quality stabilizes or hits max iterations.
 
@@ -37,7 +39,7 @@ Three LLM-powered roles collaborate in an evolution loop:
 ### Prerequisites
 
 - Python 3.11+
-- [SiliconFlow](https://siliconflow.cn/) API key
+- API key for at least one LLM provider (SiliconFlow, OpenAI, Anthropic, OpenRouter, etc.)
 
 ### Install
 
@@ -52,15 +54,25 @@ pip install -e .
 Copy `.env.example` to `.env` and fill in your API keys:
 
 ```ini
+# Set the providers you need
 SILICONFLOW_API_KEY=sk-...
-SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
 
+# Default provider for model names without a prefix
+AE_DEFAULT_PROVIDER=siliconflow
+
+# Models can use provider prefixes: openai/gpt-4o, anthropic/claude-sonnet-4-20250514
+# Without a prefix, models route through AE_DEFAULT_PROVIDER
 AE_WORKER_MODEL=Qwen/Qwen3-VL-235B-A22B-Instruct
-AE_BUILDER_MODEL=Pro/zai-org/GLM-5
-AE_OBSERVER_MODEL=Pro/moonshotai/Kimi-K2.5
+AE_BUILDER_MODEL=anthropic/claude-opus-4-6
+AE_OBSERVER_MODEL=anthropic/claude-opus-4-6
 AE_DATABASE_URL=sqlite:///./data/anything_extractor.db
 AE_LANGUAGE=bilingual
 ```
+
+Each role (Worker, Builder, Observer) can independently use any provider. Mix and match freely — e.g. use Claude for Builder/Observer and SiliconFlow for Worker to keep extraction costs low.
 
 ### Run
 
@@ -136,7 +148,7 @@ src/ae/
 ├── cli.py                 # Typer CLI (11 commands)
 ├── db.py                  # SQLAlchemy (SQLite / PostgreSQL)
 ├── models.py              # 10 ORM models
-├── llm.py                 # SiliconFlow client (OpenAI-compatible)
+├── llm.py                 # Multi-provider LLM client (via LiteLLM)
 ├── pdf.py                 # PDF parsing (pymupdf + MinerU fallback)
 ├── builder/               # Schema proposal, code generation, git ops
 ├── worker/                # Workflow execution, confidence scoring, export

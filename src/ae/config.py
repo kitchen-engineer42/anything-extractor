@@ -19,7 +19,13 @@ class Settings(BaseSettings):
     # API keys
     siliconflow_api_key: str = ""
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    openrouter_api_key: str = ""
     mineru_api_key: str = ""
+
+    # Default provider for model names without a provider prefix
+    ae_default_provider: str = "siliconflow"
 
     # LLM models
     ae_worker_model: str = "Qwen/Qwen3-VL-235B-A22B-Instruct"
