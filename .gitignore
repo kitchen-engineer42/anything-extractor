@@ -1,0 +1,43 @@
+# Environment and secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workflows (separate git repo)
+workflows/
+
+# Data (large files)
+corpus_research_report_202602/
+data/anything_extractor.db
+data/output/
+
+# Logs
+logs/*.jsonl
+
+# Claude
+.claude/
