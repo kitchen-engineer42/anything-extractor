@@ -1,6 +1,10 @@
 # Environment and secrets
 .env
-.env.*
+.env.local
+
+# Spec docs (internal)
+spec.md
+spec_draft.md
 
 # Python
 __pycache__/
