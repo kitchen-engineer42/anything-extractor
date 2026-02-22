@@ -32,6 +32,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# Dev logs (internal)
+dev_log/
+
 # Workflows (separate git repo)
 workflows/
 
